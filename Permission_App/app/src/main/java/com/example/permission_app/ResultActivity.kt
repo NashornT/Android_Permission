@@ -1,63 +1,47 @@
 package com.example.permission_app
 
+import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import java.io.*
+import java.lang.Exception
 import java.text.SimpleDateFormat
 import java.util.*
 
 class ResultActivity : AppCompatActivity() {
 
     val date = getCurrentDateTime()
-    val dateInString = date.toString("yyyy/MM/dd  HH:mm:ss")
     val stringFiles: MutableList<Any> = mutableListOf()
+    val TAG = "ReadWrite"
+    var nomeArquivo = ""
 
+    private lateinit var singlePermissionLauncher: ActivityResultLauncher<String>
 
+    override fun onStart() {
+        super.onStart()
+        requestReadPermission()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_result)
-
-        if(ActivityCompat.checkSelfPermission(this,android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED
-        ){
-            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),101)
-
-        }
-
-//        val path = Environment.getExternalStorageDirectory().toString() + "/Download"
-//        Log.d("Files", "Path: $path")
-//        val directory = File(path)
-//        val files = directory.listFiles()
-//        Log.d("Files", "Size: " + files.size)
-//        for (i in files.indices) {
-//            Log.d("Files", "FileName:" + files[i].name)
-//        }
-
-        val path = this.getExternalFilesDir(null)
-        val folder = File(path,"Android_Writer")
-        for (file in folder.list()){
-            Log.d("Files","$file")
-            stringFiles.add(file)
-
-        }
-        Log.d("Files", " ${stringFiles}")
-        findViewById<TextView>(R.id.txt_result).setText(stringFiles.toString())
+        listFiles()
 
 
 
 
     }
 
-
-    private fun readFile() {
+    // METODO #1 para ler arquivos
+    private fun readfile() {
         val file = File(getExternalFilesDir(null), "tp1.txt")
         if(!file.exists()) {
             Toast.makeText(this@ResultActivity,
@@ -92,6 +76,101 @@ class ResultActivity : AppCompatActivity() {
         return Calendar.getInstance().time
     }
 
+    fun isExternalStorageReadable(): Boolean {
+        if (Environment.MEDIA_MOUNTED == Environment.getExternalStorageState()
+            ||
+            Environment.MEDIA_MOUNTED_READ_ONLY == Environment.getExternalStorageState()
+        ) {
+            Log.i(TAG, "Pode ler do diretorio externo.")
+            return true
+        } else {
+            Log.i(TAG, "Não pode ler do diretorio externo.")
+        }
+        return false
+    }
+
+    private fun requestReadPermission() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                readFile()
+            }
+            else -> {
+                singlePermissionLauncher.launch(
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                )
+            }
+        }
+    }
+
+    // METODO #2 para ler arquivos
+    fun readFile() {
+        if (isExternalStorageReadable()) {
+            val endereco =
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            nomeArquivo = date.toString("yyyy_MM_dd__HH_mm_ss")
+
+            val path = "$endereco/$nomeArquivo"
+            Log.i(TAG, "Lendo do arquivo em")
+            Log.i(TAG, "${path}")
+
+            try {
+                findViewById<TextView>(R.id.txt_result).text = File(path).readText()
+            } catch (e: Exception) {
+                Log.i(TAG, e.message!!)
+            }
+        } else {
+            Toast.makeText(
+                this,
+                "Não foi possível ler do disco",
+                Toast.LENGTH_SHORT
+            )
+                .show()
+        }
+    }
+
+    // METODO #1 para listar arquivos
+    fun listFiles() {
+        if (isExternalStorageReadable()) {
+            val endereco =
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            var listaArquivos = ""
+            for (f in endereco.listFiles()) {
+                listaArquivos += "${f.name} \n"
+            }
+            try {
+                val msg = "Lista de arquivos da pasta downloads no SD CARD:\n $listaArquivos"
+                findViewById<TextView>(R.id.txt_result).text = msg
+            } catch (e: Exception) {
+                Log.i(TAG, e.message!!)
+            }
+        } else {
+            Toast.makeText(
+                this,
+                "Não foi possível ler do disco",
+                Toast.LENGTH_SHORT
+            )
+                .show()
+        }
+    }
+
+    // METODO #2 para listar arquivos
+    fun listfiles(){
+                val path = this.getExternalFilesDir(null)
+        val folder = File(path,"Android_Writer")
+        for (file in folder.list()){
+            Log.d("Files","$file")
+            stringFiles.add(file)
+
+        }
+        Log.d("Files", " ${stringFiles}")
+        findViewById<TextView>(R.id.txt_result).setText(stringFiles.toString())
+
+    }
+
+    // METODO #1 para abrir arquivos
     private fun openFile(){
 
         val path = this.getExternalFilesDir(null)

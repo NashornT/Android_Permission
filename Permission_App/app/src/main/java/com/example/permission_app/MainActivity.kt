@@ -13,11 +13,13 @@ import android.location.LocationListener
 import android.net.Uri
 import android.nfc.Tag
 import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.Settings
 import android.util.AttributeSet
 import android.widget.Button
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -43,37 +45,16 @@ class MainActivity : AppCompatActivity() {
     val date = getCurrentDateTime()
     val dateInString = date.toString("yyyy/MM/dd  HH:mm:ss")
     val onlydate = date.toString("yyyy/MM/dd")
-    var permissionCode = 0
+    val TAG = "ReadWrite"
+    var nomeArquivo = ""
 
 
-//    val btn_save_doc = findViewById<Button>(R.id.btn_save_loc)
-//    val btn_save_file = findViewById<Button>(R.id.btn_save_file)
-//    val btn_result = findViewById<Button>(R.id.btn_result)
 
 
+    private lateinit var singlePermissionLauncher: ActivityResultLauncher<String>
     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
 
 
-    override fun onStart() {
-        super.onStart()
-
-        if(ActivityCompat.checkSelfPermission(this,android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED
-        ){
-            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),101)
-
-        }
-
-        if(ActivityCompat.checkSelfPermission(this,android.Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED
-        ){
-            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),101)
-
-        }
-
-    }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,13 +65,15 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btn_save_file).isEnabled = false
         findViewById<Button>(R.id.btn_result).isEnabled = false
 
+        setupCheckPermissions()
+
 
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this)
 
 
         findViewById<Button>(R.id.btn_get_location).setOnClickListener {
-            getLastLocation()
 
+            getLastLocation()
             findViewById<Button>(R.id.btn_save_loc).isEnabled = true
             findViewById<Button>(R.id.btn_save_file).isEnabled = true
         }
@@ -117,13 +100,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btn_result).setOnClickListener {
+
             val intent = Intent(this,ResultActivity::class.java)
             startActivity(intent)
         }
 
 
         findViewById<Button>(R.id.btn_save_file).setOnClickListener {
-            createFile()
+//            createFile()
+            requestWritePermission()
             findViewById<Button>(R.id.btn_result).isEnabled = true
 
 
@@ -131,16 +116,55 @@ class MainActivity : AppCompatActivity() {
 
 
 
+    }
 
-
-
+    fun isExternalStorageWritable(): Boolean {
+        if (Environment.MEDIA_MOUNTED == Environment.getExternalStorageState()) {
+            Log.i(TAG, "Pode escrever no diretorio externo.")
+            return true
+        } else {
+            Log.i(TAG, "Não pode escrever no diretorio externo.")
+        }
+        return false
     }
 
 
+    private fun setupCheckPermissions() {
+        // Lançador de requisição de uma permissão:
+        singlePermissionLauncher = registerForActivityResult(
+            ActivityResultContracts
+                .RequestPermission() // Requer uma permissão
+        ) { // Retorna verdadeiro se a permissão foi concedida
+                isGranted: Boolean ->
+            if (isGranted) {
+                Log.i(TAG, "Granted")
+            } else {
+                Log.i(TAG, "Denied")
+            }
+        }
+    }
 
+    private fun requestWritePermission() {
+
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                writeFile()
+            }
+            else -> {
+                singlePermissionLauncher.launch(
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                )
+            }
+        }
+    }
+
+
+    // METODO  para salvar um Doc_FILE
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-
 
 
         if(requestCode == CREATE_FILE && resultCode == RESULT_OK){
@@ -157,6 +181,7 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    // METODO  para pegar a GeoLocalização
     private fun getLastLocation() {
         val task = fusedLocationProviderClient.lastLocation
 
@@ -178,28 +203,43 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    // METODO  para formatar
     fun Date.toString(format: String, locale: Locale = Locale.getDefault()): String {
         val formatter = SimpleDateFormat(format, locale)
         return formatter.format(this)
     }
 
+    // METODO  para pegar  a data
     fun getCurrentDateTime(): Date {
         return Calendar.getInstance().time
     }
 
-    private fun createDeleteFile() {
-        val file = File(getExternalFilesDir(null), "tp1.txt")
-        val os: OutputStream = FileOutputStream(file)
-        os.write("Data:${onlydate}\nLatitude:${lat}\nLongitude:${long}".toByteArray())
-        os.close()
-
-
-
+    // METODO #1 para escrever em arquivos
+    fun writeFile() {
+        if (isExternalStorageWritable()) {
+            val endereco = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            nomeArquivo = date.toString("yyyy_MM_dd__HH_mm_ss")
+            val file = File("$endereco/$nomeArquivo")
+            Log.i(TAG, "Criando arquivo em")
+            Log.i(TAG, "${file.absolutePath}")
+            try {
+                file.writeText("Latitude:${lat}\n" +
+                        "Longitude:${long}")
+            } catch (e: java.lang.Exception) {
+                Log.i(TAG, e.message!!)
+            }
+        } else {
+            Toast.makeText(
+                this,
+                "Não foi possível escrever no disco",
+                Toast.LENGTH_SHORT
+            )
+                .show()
+        }
     }
 
-
+    // METODO #2 para escrever em arquivos
     private fun createFile(){
-
         if(ActivityCompat.checkSelfPermission(this,android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
             != PackageManager.PERMISSION_GRANTED
@@ -208,7 +248,6 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),101)
             return
         }
-
 
         val path = this.getExternalFilesDir(null)
         val folder = File(path,"Android_Writer")
@@ -221,5 +260,15 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    // METODO #3 para escrever em arquivos
+    private fun createDeleteFile() {
+        val file = File(getExternalFilesDir(null), "tp1.txt")
+        val os: OutputStream = FileOutputStream(file)
+        os.write("Data:${onlydate}\nLatitude:${lat}\nLongitude:${long}".toByteArray())
+        os.close()
+
+
+
+    }
 
 }
